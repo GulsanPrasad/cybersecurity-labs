@@ -1,4 +1,4 @@
-# Cybersecurity Home Labs
+# Cybersecurity  Labs
 
 Hands-on offensive security lab write-ups covering VulnHub Boot2Root machines, DVWA web app testing, API security (crAPI), WordPress vulnerability assessment, and TryHackMe rooms — built and documented end-to-end.
 
